@@ -1,0 +1,9 @@
+# Видео для сайта: одна ссылка — одна строка, верхняя показывается первой.
+# Подходят YouTube (и Shorts), Vimeo, Google Drive или .mp4, загруженный рядом с этим файлом.
+# Разделы идут на сайте в том же порядке, что здесь. Строки с # на сайте не видны.
+
+SHORT FORM
+# пример: https://youtube.com/shorts/XXXXXXXXXXX
+
+LONG FORM
+# пример: https://youtu.be/XXXXXXXXXXX
