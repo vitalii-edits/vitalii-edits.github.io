@@ -4,6 +4,14 @@
 
 SHORT FORM
 # пример: https://youtube.com/shorts/XXXXXXXXXXX
+https://youtu.be/eeUV-dlKP5g 16:9
+https://youtube.com/shorts/EygHRW8ku44?feature=share
+https://youtu.be/63GV7_R9GLo 16:9
+https://youtube.com/shorts/FH7NJdbOLTM?feature=share
+https://youtube.com/shorts/GHmbRSdGBxE?feature=share
+https://youtube.com/shorts/OadRB0vxj5Y?feature=share
+https://youtube.com/shorts/WFPhC4VYv-o?feature=share
 
 LONG FORM
 # пример: https://youtu.be/XXXXXXXXXXX
+https://youtu.be/2-w1kg47Nuw
