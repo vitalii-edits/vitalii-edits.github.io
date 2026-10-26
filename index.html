@@ -83,6 +83,35 @@ body {
 }
 .short .card { aspect-ratio: 9 / 16; }
 .long .card { aspect-ratio: 16 / 9; }
+
+/* The cover. A horizontal video in the vertical grid (or the other way round)
+   sits centered in its own shape on a blurred copy of the cover. */
+.media { position: absolute; inset: 0; overflow: hidden; }
+.short .card[data-orient="wide"] .media {
+  inset: 50% 0 auto;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  transform: translateY(-50%);
+}
+.long .card[data-orient="tall"] .media {
+  inset: 0 auto 0 50%;
+  height: 100%;
+  aspect-ratio: 9 / 16;
+  transform: translateX(-50%);
+}
+.bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scale(1.25);
+  filter: blur(22px) brightness(.5);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .35s ease;
+}
+.bg.ready { opacity: 1; }
 .thumb {
   position: absolute;
   inset: 0;
@@ -94,6 +123,7 @@ body {
   transition: opacity .35s ease, transform .6s cubic-bezier(.2, .7, .2, 1);
 }
 .thumb.ready { opacity: 1; }
+
 .play {
   position: absolute;
   left: 50%;
@@ -150,12 +180,12 @@ body {
 }
 @keyframes fade { from { opacity: 0; } }
 .lb-frame { position: relative; overflow: hidden; border-radius: 12px; background: #000; }
-.lb-frame.short {
+.lb-frame.tall {
   aspect-ratio: 9 / 16;
   height: min(calc(100vh - 100px), calc((100vw - 24px) * 16 / 9));
   height: min(calc(100dvh - 100px), calc((100vw - 24px) * 16 / 9));
 }
-.lb-frame.long {
+.lb-frame.wide {
   aspect-ratio: 16 / 9;
   width: min(calc(100vw - 24px), 1280px, calc((100vh - 100px) * 16 / 9));
   width: min(calc(100vw - 24px), 1280px, calc((100dvh - 100px) * 16 / 9));
@@ -205,6 +235,7 @@ body {
 <script>
 (() => {
   // The video list lives in videos.txt next to this file. Nothing here needs editing.
+  // In videos.txt, "16:9" or "9:16" after a link (with a space) sets that video's shape.
   const LIST_FILE = 'videos.txt';
   const LABELS = { short: 'Short Form', long: 'Long Form' };
   const ICON_PLAY = '<svg class="tri" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13a1 1 0 0 0 1.53.85l10.4-6.5a1 1 0 0 0 0-1.7L9.53 4.65A1 1 0 0 0 8 5.5z"/></svg>';
@@ -245,8 +276,12 @@ body {
     for (let line of text.split(/\r?\n/)) {
       line = line.trim();
       if (!line || line.startsWith('#') || line.startsWith('//')) continue;
+      let orient = '';
+      const mark = line.match(/^(.*\S)\s+(16:9|9:16)$/);
+      if (mark) { line = mark[1]; orient = mark[2] === '16:9' ? 'wide' : 'tall'; }
       const video = parseLink(line);
       if (video) {
+        if (orient) video.orient = orient;
         if (!current) use('short');
         current.items.push(video);
         continue;
@@ -257,7 +292,7 @@ body {
     return order.filter(s => s.items.length);
   }
 
-  // ---------- thumbnails (loaded only when a card comes near the screen) ----------
+  // ---------- covers (loaded only when a card comes near the screen) ----------
   const observer = 'IntersectionObserver' in window
     ? new IntersectionObserver(entries => {
         for (const e of entries) {
@@ -265,6 +300,17 @@ body {
         }
       }, { rootMargin: '400px 0px' })
     : null;
+
+  // true when the video's shape differs from the grid it sits in
+  function offShape(card) {
+    return card.dataset.orient !== (card.parentElement.classList.contains('short') ? 'tall' : 'wide');
+  }
+
+  function setOrient(card, v, w, h) {
+    if (v.orient || !w || !h) return;
+    v.orient = w > h ? 'wide' : 'tall';
+    card.dataset.orient = v.orient;
+  }
 
   function setImage(card, src, fallback) {
     const img = new Image();
@@ -275,12 +321,21 @@ body {
       // YouTube answers a missing HD cover with a tiny grey placeholder
       if (fallback && img.naturalWidth <= 120) { const f = fallback; fallback = ''; img.src = f; return; }
       img.classList.add('ready');
+      if (offShape(card) && !card.querySelector('.bg')) {
+        const bg = new Image();
+        bg.className = 'bg';
+        bg.alt = '';
+        bg.decoding = 'async';
+        bg.onload = () => bg.classList.add('ready');
+        bg.src = img.src;
+        card.prepend(bg);
+      }
     };
     img.onerror = () => {
       if (fallback) { const f = fallback; fallback = ''; img.src = f; } else img.remove();
     };
     img.src = src;
-    card.prepend(img);
+    card.querySelector('.media').appendChild(img);
   }
 
   function loadThumb(card) {
@@ -293,7 +348,11 @@ body {
       const url = `https://vimeo.com/${v.id}${v.hash ? '/' + v.hash : ''}`;
       fetch(`https://vimeo.com/api/oembed.json?url=${encodeURIComponent(url)}&width=1280`)
         .then(r => (r.ok ? r.json() : null))
-        .then(j => { if (j && j.thumbnail_url) setImage(card, j.thumbnail_url); })
+        .then(j => {
+          if (!j) return;
+          setOrient(card, v, j.width, j.height);
+          if (j.thumbnail_url) setImage(card, j.thumbnail_url);
+        })
         .catch(() => {});
     } else if (v.kind === 'file') {
       const vid = document.createElement('video');
@@ -305,9 +364,10 @@ body {
       vid.setAttribute('playsinline', '');
       vid.setAttribute('aria-hidden', 'true');
       vid.tabIndex = -1;
+      vid.addEventListener('loadedmetadata', () => setOrient(card, v, vid.videoWidth, vid.videoHeight), { once: true });
       vid.addEventListener('loadeddata', () => vid.classList.add('ready'), { once: true });
       vid.src = v.src.includes('#') ? v.src : v.src + '#t=0.1';
-      card.prepend(vid);
+      card.querySelector('.media').appendChild(vid);
     }
   }
 
@@ -317,18 +377,18 @@ body {
     const card = document.createElement(isLink ? 'a' : 'button');
     card.className = 'card';
     card.video = v;
+    card.dataset.orient = v.orient || (type === 'short' ? 'tall' : 'wide');
     if (isLink) {
       card.href = v.href;
       card.target = '_blank';
       card.rel = 'noopener';
       card.setAttribute('aria-label', `Open ${LABELS[type]} video ${n} in a new tab`);
-      card.innerHTML = `<span class="play">${ICON_OPEN}</span>`;
     } else {
       card.type = 'button';
       card.setAttribute('aria-label', `Play ${LABELS[type]} video ${n}`);
-      card.innerHTML = `<span class="play">${ICON_PLAY}</span>`;
       card.addEventListener('click', () => openPlayer(v, type, card));
     }
+    card.innerHTML = `<span class="media"></span><span class="play">${isLink ? ICON_OPEN : ICON_PLAY}</span>`;
     if (observer) observer.observe(card); else loadThumb(card);
     return card;
   }
@@ -401,7 +461,7 @@ body {
 
   function openPlayer(v, type, card) {
     lastCard = card;
-    lbFrame.className = 'lb-frame ' + type;
+    lbFrame.className = 'lb-frame ' + card.dataset.orient;
     lbFrame.textContent = '';
     let el;
     if (v.kind === 'file') {
